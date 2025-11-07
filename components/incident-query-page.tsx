@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { logger } from '@/lib/logger';
 import {
   Search,
@@ -15,6 +16,7 @@ import {
   ChevronDown,
   ChevronUp,
   Mail,
+  LogOut,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -141,6 +143,7 @@ const brandNameOptions = [
 ];
 
 export function IncidentQueryPage() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [dateRange, setDateRange] = useState<DateRange>({ from: undefined, to: undefined });
   const [activeQuickRange, setActiveQuickRange] = useState<string | null>(null);
@@ -159,6 +162,28 @@ export function IncidentQueryPage() {
   const { toast } = useToast();
 
   const searchInProgressRef = useRef(false);
+
+  // Logout handler
+  const handleLogout = useCallback(async () => {
+    try {
+      const response = await fetch('/api/auth/logout', { method: 'POST' });
+      if (response.ok) {
+        toast({
+          title: 'Logged out',
+          description: 'You have been successfully logged out',
+        });
+        router.push('/login');
+        router.refresh();
+      }
+    } catch (error) {
+      logger.error('Logout error', { error });
+      toast({
+        title: 'Logout failed',
+        description: 'An error occurred during logout',
+        variant: 'destructive',
+      });
+    }
+  }, [toast, router]);
 
   const CACHE_KEY = 'incident-email-cache';
   const EXPANDED_KEY = 'incident-expanded-state';
@@ -745,7 +770,19 @@ export function IncidentQueryPage() {
                 </p>
               </div>
             </div>
-            <ThemeToggle />
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={handleLogout}
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                title="Logout"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Logout</span>
+              </Button>
+              <ThemeToggle />
+            </div>
           </div>
         </div>
       </header>
