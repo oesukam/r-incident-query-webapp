@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import { getAccessToken } from '@/lib/token-manager';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -13,22 +14,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Document ID is required' }, { status: 400 });
     }
 
-    logger.info({ documentId }, 'Downloading document');
+    logger.info('Downloading document', { documentId });
 
-    const tokenResponse = await fetch(`${request.nextUrl.origin}/api/auth/token`, {
-      method: 'POST',
-    });
-
-    if (!tokenResponse.ok) {
-      const error = await tokenResponse.json();
-      return NextResponse.json(
-        { error: 'Failed to authenticate', details: error },
-        { status: 401 }
-      );
-    }
-
-    const tokenData = await tokenResponse.json();
-    const accessToken = tokenData.access_token;
+    // Get access token (uses cache if not expired)
+    const accessToken = await getAccessToken();
 
     const response = await fetch(
       `https://threatintel.phishlabs.com/api/external/file/document/${documentId}`,

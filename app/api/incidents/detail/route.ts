@@ -1,8 +1,9 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import { getAccessToken } from '@/lib/token-manager';
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+export const revalidate = 60; // Cache for 60 seconds
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,23 +14,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Incident ID is required' }, { status: 400 });
     }
 
-    logger.info({ incidentId }, 'Fetching incident details');
+    logger.info('Fetching incident details', { incidentId });
 
-    // Get access token
-    const tokenResponse = await fetch(`${request.nextUrl.origin}/api/auth/token`, {
-      method: 'POST',
-    });
-
-    if (!tokenResponse.ok) {
-      const error = await tokenResponse.json();
-      return NextResponse.json(
-        { error: 'Failed to authenticate', details: error },
-        { status: 401 }
-      );
-    }
-
-    const tokenData = await tokenResponse.json();
-    const accessToken = tokenData.access_token;
+    // Get access token (uses cache if not expired)
+    const accessToken = await getAccessToken();
 
     // Fetch incident details from Phishlabs API
     const response = await fetch(
@@ -45,10 +33,11 @@ export async function GET(request: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error(
-        { errorText, status: response.status, incidentId },
-        'Incident detail fetch failed'
-      );
+      logger.error('Incident detail fetch failed', {
+        errorText,
+        status: response.status,
+        incidentId,
+      });
       return NextResponse.json(
         { error: 'Failed to fetch incident details', details: errorText },
         { status: response.status }
@@ -56,7 +45,7 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json();
-    logger.info({ incidentId }, 'Incident details fetched successfully');
+    logger.info('Incident details fetched successfully', { incidentId });
 
     return NextResponse.json(data, {
       headers: {
@@ -66,7 +55,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    logger.error({ error }, 'Error fetching incident details');
+    logger.error('Error fetching incident details', { error });
     return NextResponse.json(
       {
         error: 'Internal server error',
