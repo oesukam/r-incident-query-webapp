@@ -1,0 +1,27 @@
+name: R-INCIDENT-QUERY / PR stats
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  pr-stats:
+    runs-on: ubuntu-latest
+    if: ${{ github.actor != 'dependabot[bot]' }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Run pull request stats
+        uses: flowwer-dev/pull-request-stats@b1825f03f7f6887d96f428a4eb6039674d463ba4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          charts: true
+          period: 14
+          sortBy: "totalReviews"
+          stats: "totalReviews,timeToReview,totalComments,openedPullRequests"
