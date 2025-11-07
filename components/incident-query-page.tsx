@@ -506,7 +506,7 @@ export function IncidentQueryPage() {
                 );
 
                 const fullNameIndex = headers.findIndex(
-                  (h) => /full_name/i.test(h) || /fullname/i.test(h) || /name/i.test(h)
+                  (h) => /full_name/i.test(h) || /fullname/i.test(h)
                 );
                 const sourceDescIndex = headers.findIndex(
                   (h) => /source_description/i.test(h) || /description/i.test(h) || /Title/.test(h)
