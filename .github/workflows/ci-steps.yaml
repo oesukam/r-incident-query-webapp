@@ -156,42 +156,6 @@ jobs:
       issues: write
       pull-requests: write
 
-    services:
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
-
-      postgres:
-        image: postgres:14.9-alpine
-        env:
-          POSTGRES_HOST: ${{ env.POSTGRES_HOST }}
-          POSTGRES_DB: ${{ env.POSTGRES_DB }}
-          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-          POSTGRES_PORT: ${{ env.POSTGRES_PORT }}
-          POSTGRES_USER: ${{ env.POSTGRES_USER }}
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      mongo:
-        image: mongo:latest
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --eval 'db.adminCommand({ ping: 1 })'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -218,15 +182,6 @@ jobs:
 
       - name: Clean coverage folder
         run: rm -rf coverage .nyc_output
-      - name: Run migration
-        env:
-          POSTGRES_URL: ${{ env.POSTGRES_URL }}
-          POSTGRES_URL_TEST: ${{ env.POSTGRES_URL_TEST }}
-          MONGO_DB_URL: ${{ env.MONGO_DB_URL }}
-          MONGO_DB_NAME: ${{ env.MONGO_DB_NAME }}
-          REDIS_HOST: ${{ env.REDIS_HOST }}
-          REDIS_PORT: ${{ env.REDIS_PORT }}
-        run: yarn test:db:migrate
 
       - name: Configure Datadog Test Optimization
         uses: datadog/test-visibility-github-action@4d09028b08a1f4431663b1de1550249cd4764051 # v2.4.1
@@ -238,12 +193,6 @@ jobs:
       - name: Run tests
         shell: bash
         env:
-          POSTGRES_URL: ${{ env.POSTGRES_URL }}
-          POSTGRES_URL_TEST: ${{ env.POSTGRES_URL_TEST }}
-          MONGO_DB_URL: ${{ env.MONGO_DB_URL }}
-          MONGO_DB_NAME: ${{ env.MONGO_DB_NAME }}
-          REDIS_HOST: ${{ env.REDIS_HOST }}
-          REDIS_PORT: ${{ env.REDIS_PORT }}
           NODE_OPTIONS: "--max-old-space-size=8000 -r ${{ env.DD_TRACE_PACKAGE }}"
           DD_CIVISIBILITY_ENABLED: ${{ env.DD_CIVISIBILITY_ENABLED }}
           DD_API_KEY: ${{ env.DD_API_KEY }}
