@@ -19,53 +19,59 @@ const createServerLogger = () => {
     return levels.indexOf(level) >= currentLevelIndex;
   };
 
-  const formatMessage = (level: string, contextOrMessage: unknown, message?: string) => {
+  const formatMessage = (level: string, messageOrContext: unknown, contextOrMessage?: unknown) => {
     const timestamp = new Date().toISOString();
     const levelStr = level.toUpperCase().padEnd(5);
 
-    if (typeof contextOrMessage === 'string' || contextOrMessage instanceof String) {
-      // Simple message: logger.info('message')
-      return `[${timestamp}] ${levelStr} ${contextOrMessage}`;
-    } else if (message) {
-      // Context with message: logger.info({ key: 'value' }, 'message')
-      const contextStr = JSON.stringify(contextOrMessage);
-      return `[${timestamp}] ${levelStr} ${message} ${contextStr}`;
+    if (typeof messageOrContext === 'string' || messageOrContext instanceof String) {
+      if (contextOrMessage && typeof contextOrMessage === 'object') {
+        // Message with context: logger.info('message', { key: 'value' })
+        const contextStr = JSON.stringify(contextOrMessage);
+        return `[${timestamp}] ${levelStr} ${messageOrContext} ${contextStr}`;
+      } else {
+        // Simple message: logger.info('message')
+        return `[${timestamp}] ${levelStr} ${messageOrContext}`;
+      }
+    } else if (typeof contextOrMessage === 'string' || contextOrMessage instanceof String) {
+      // Legacy: Context with message: logger.info({ key: 'value' }, 'message')
+      const contextStr = JSON.stringify(messageOrContext);
+      return `[${timestamp}] ${levelStr} ${contextOrMessage} ${contextStr}`;
     } else {
       // Just context: logger.info({ key: 'value' })
-      const contextStr = JSON.stringify(contextOrMessage);
+      const contextStr = JSON.stringify(messageOrContext);
       return `[${timestamp}] ${levelStr} ${contextStr}`;
     }
   };
 
   return {
-    trace: (contextOrMessage: unknown, message?: string) => {
+    trace: (messageOrContext: unknown, contextOrMessage?: unknown) => {
       if (shouldLog('trace')) {
-        console.debug(formatMessage('trace', contextOrMessage, message));
+        console.debug(formatMessage('trace', messageOrContext, contextOrMessage));
       }
     },
-    debug: (contextOrMessage: unknown, message?: string) => {
+    debug: (messageOrContext: unknown, contextOrMessage?: unknown) => {
       if (shouldLog('debug')) {
-        console.debug(formatMessage('debug', contextOrMessage, message));
+        console.debug(formatMessage('debug', messageOrContext, contextOrMessage));
       }
     },
-    info: (contextOrMessage: unknown, message?: string) => {
+    info: (messageOrContext: unknown, contextOrMessage?: unknown) => {
       if (shouldLog('info')) {
-        console.info(formatMessage('info', contextOrMessage, message));
+        console.info(formatMessage('info', messageOrContext, contextOrMessage));
       }
     },
-    warn: (contextOrMessage: unknown, message?: string) => {
+    warn: (messageOrContext: unknown, contextOrMessage?: unknown) => {
       if (shouldLog('warn')) {
-        console.warn(formatMessage('warn', contextOrMessage, message));
+        console.warn(formatMessage('warn', messageOrContext, contextOrMessage));
       }
     },
-    error: (contextOrMessage: unknown, message?: string) => {
+    error: (messageOrContext: unknown, contextOrMessage?: unknown) => {
       if (shouldLog('error')) {
-        console.error(formatMessage('error', contextOrMessage, message));
+        console.error(formatMessage('error', messageOrContext, contextOrMessage));
       }
     },
-    fatal: (contextOrMessage: unknown, message?: string) => {
+    fatal: (messageOrContext: unknown, contextOrMessage?: unknown) => {
       if (shouldLog('fatal')) {
-        console.error(formatMessage('fatal', contextOrMessage, message));
+        console.error(formatMessage('fatal', messageOrContext, contextOrMessage));
       }
     },
     child: (context: Record<string, unknown>) => {
@@ -73,36 +79,72 @@ const createServerLogger = () => {
       const parentLogger = createServerLogger();
       return {
         ...parentLogger,
-        trace: (msg: unknown, m?: string) =>
-          parentLogger.trace(
-            { ...context, ...(typeof msg === 'object' ? msg : {}) },
-            m || (typeof msg === 'string' ? msg : '')
-          ),
-        debug: (msg: unknown, m?: string) =>
-          parentLogger.debug(
-            { ...context, ...(typeof msg === 'object' ? msg : {}) },
-            m || (typeof msg === 'string' ? msg : '')
-          ),
-        info: (msg: unknown, m?: string) =>
-          parentLogger.info(
-            { ...context, ...(typeof msg === 'object' ? msg : {}) },
-            m || (typeof msg === 'string' ? msg : '')
-          ),
-        warn: (msg: unknown, m?: string) =>
-          parentLogger.warn(
-            { ...context, ...(typeof msg === 'object' ? msg : {}) },
-            m || (typeof msg === 'string' ? msg : '')
-          ),
-        error: (msg: unknown, m?: string) =>
-          parentLogger.error(
-            { ...context, ...(typeof msg === 'object' ? msg : {}) },
-            m || (typeof msg === 'string' ? msg : '')
-          ),
-        fatal: (msg: unknown, m?: string) =>
-          parentLogger.fatal(
-            { ...context, ...(typeof msg === 'object' ? msg : {}) },
-            m || (typeof msg === 'string' ? msg : '')
-          ),
+        trace: (messageOrContext: unknown, contextOrMessage?: unknown) => {
+          if (typeof messageOrContext === 'string') {
+            const mergedContext = { ...context, ...(contextOrMessage as Record<string, unknown>) };
+            parentLogger.trace(messageOrContext, mergedContext);
+          } else {
+            parentLogger.trace(
+              { ...context, ...(messageOrContext as Record<string, unknown>) },
+              contextOrMessage
+            );
+          }
+        },
+        debug: (messageOrContext: unknown, contextOrMessage?: unknown) => {
+          if (typeof messageOrContext === 'string') {
+            const mergedContext = { ...context, ...(contextOrMessage as Record<string, unknown>) };
+            parentLogger.debug(messageOrContext, mergedContext);
+          } else {
+            parentLogger.debug(
+              { ...context, ...(messageOrContext as Record<string, unknown>) },
+              contextOrMessage
+            );
+          }
+        },
+        info: (messageOrContext: unknown, contextOrMessage?: unknown) => {
+          if (typeof messageOrContext === 'string') {
+            const mergedContext = { ...context, ...(contextOrMessage as Record<string, unknown>) };
+            parentLogger.info(messageOrContext, mergedContext);
+          } else {
+            parentLogger.info(
+              { ...context, ...(messageOrContext as Record<string, unknown>) },
+              contextOrMessage
+            );
+          }
+        },
+        warn: (messageOrContext: unknown, contextOrMessage?: unknown) => {
+          if (typeof messageOrContext === 'string') {
+            const mergedContext = { ...context, ...(contextOrMessage as Record<string, unknown>) };
+            parentLogger.warn(messageOrContext, mergedContext);
+          } else {
+            parentLogger.warn(
+              { ...context, ...(messageOrContext as Record<string, unknown>) },
+              contextOrMessage
+            );
+          }
+        },
+        error: (messageOrContext: unknown, contextOrMessage?: unknown) => {
+          if (typeof messageOrContext === 'string') {
+            const mergedContext = { ...context, ...(contextOrMessage as Record<string, unknown>) };
+            parentLogger.error(messageOrContext, mergedContext);
+          } else {
+            parentLogger.error(
+              { ...context, ...(messageOrContext as Record<string, unknown>) },
+              contextOrMessage
+            );
+          }
+        },
+        fatal: (messageOrContext: unknown, contextOrMessage?: unknown) => {
+          if (typeof messageOrContext === 'string') {
+            const mergedContext = { ...context, ...(contextOrMessage as Record<string, unknown>) };
+            parentLogger.fatal(messageOrContext, mergedContext);
+          } else {
+            parentLogger.fatal(
+              { ...context, ...(messageOrContext as Record<string, unknown>) },
+              contextOrMessage
+            );
+          }
+        },
       };
     },
   };

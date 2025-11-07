@@ -1,8 +1,9 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import { getAccessToken } from '@/lib/token-manager';
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+export const revalidate = 60; // Cache for 60 seconds
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,33 +16,18 @@ export async function GET(request: NextRequest) {
     const pageSize = searchParams.get('pageSize') || '10';
     const threatType = searchParams.get('ThreatTypeCodes');
 
-    logger.info(
-      {
-        query,
-        startDate,
-        endDate,
-        brandName,
-        threatType,
-        page,
-        pageSize,
-      },
-      'Searching incidents'
-    );
-
-    const tokenResponse = await fetch(`${request.nextUrl.origin}/api/auth/token`, {
-      method: 'POST',
+    logger.info('Searching incidents', {
+      query,
+      startDate,
+      endDate,
+      brandName,
+      threatType,
+      page,
+      pageSize,
     });
 
-    if (!tokenResponse.ok) {
-      const error = await tokenResponse.json();
-      return NextResponse.json(
-        { error: 'Failed to authenticate', details: error },
-        { status: 401 }
-      );
-    }
-
-    const tokenData = await tokenResponse.json();
-    const accessToken = tokenData.access_token;
+    // Get access token (uses cache if not expired)
+    const accessToken = await getAccessToken();
 
     const apiUrl = new URL('https://threatintel.phishlabs.com/api/external/incident/search');
     if (query) {
@@ -82,10 +68,9 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json();
-    logger.info(
-      { totalCount: data?.totalCount || data?.items?.length || 0 },
-      'Search results retrieved'
-    );
+    logger.info('Search results retrieved', {
+      totalCount: data?.totalCount || data?.items?.length || 0,
+    });
     return NextResponse.json(data, {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',

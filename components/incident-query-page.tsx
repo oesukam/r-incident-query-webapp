@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { logger } from '@/lib/logger';
 import {
   Search,
@@ -12,6 +12,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Building2,
+  ChevronDown,
+  ChevronUp,
+  Mail,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +32,19 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { SearchableSelect } from '@/components/searchable-select';
+
+interface EmailData {
+  email: string;
+  username?: string;
+  full_name?: string;
+  source_description?: string;
+  source_title?: string;
+}
+
+interface CachedEmailData {
+  data: EmailData[];
+  timestamp: number;
+}
 
 interface Incident {
   id: string;
@@ -137,9 +153,91 @@ export function IncidentQueryPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [totalResults, setTotalResults] = useState(0);
+  const [expandedIncidents, setExpandedIncidents] = useState<Set<string>>(new Set());
+  const [emailCache, setEmailCache] = useState<Record<string, EmailData[]>>({});
+  const [loadingEmails, setLoadingEmails] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   const searchInProgressRef = useRef(false);
+
+  const CACHE_KEY = 'incident-email-cache';
+  const EXPANDED_KEY = 'incident-expanded-state';
+  const CACHE_EXPIRATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+  // Load cached data on mount
+  useEffect(() => {
+    try {
+      // Load email cache
+      const cachedData = sessionStorage.getItem(CACHE_KEY);
+      if (cachedData) {
+        const parsed: Record<string, CachedEmailData> = JSON.parse(cachedData);
+        const now = Date.now();
+        const validCache: Record<string, EmailData[]> = {};
+
+        // Filter out expired cache entries
+        Object.entries(parsed).forEach(([incidentId, cachedEntry]) => {
+          if (now - cachedEntry.timestamp < CACHE_EXPIRATION) {
+            validCache[incidentId] = cachedEntry.data;
+          }
+        });
+
+        if (Object.keys(validCache).length > 0) {
+          setEmailCache(validCache);
+          logger.info('Loaded email cache from storage', {
+            cachedIncidents: Object.keys(validCache).length,
+          });
+        }
+      }
+
+      // Load expanded incidents state
+      const expandedData = sessionStorage.getItem(EXPANDED_KEY);
+      if (expandedData) {
+        const expandedArray: string[] = JSON.parse(expandedData);
+        setExpandedIncidents(new Set(expandedArray));
+        logger.info('Loaded expanded incidents from storage', {
+          expandedCount: expandedArray.length,
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to load cache from storage', { error });
+    }
+  }, []);
+
+  // Save cache to sessionStorage whenever it changes
+  useEffect(() => {
+    if (Object.keys(emailCache).length > 0) {
+      try {
+        const cacheWithTimestamp: Record<string, CachedEmailData> = {};
+        Object.entries(emailCache).forEach(([incidentId, data]) => {
+          cacheWithTimestamp[incidentId] = {
+            data,
+            timestamp: Date.now(),
+          };
+        });
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify(cacheWithTimestamp));
+        logger.debug('Saved email cache to storage', {
+          cachedIncidents: Object.keys(emailCache).length,
+        });
+      } catch (error) {
+        logger.error('Failed to save email cache to storage', { error });
+      }
+    }
+  }, [emailCache]);
+
+  // Save expanded incidents state whenever it changes
+  useEffect(() => {
+    try {
+      const expandedArray = Array.from(expandedIncidents);
+      sessionStorage.setItem(EXPANDED_KEY, JSON.stringify(expandedArray));
+      if (expandedArray.length > 0) {
+        logger.debug('Saved expanded incidents to storage', {
+          expandedCount: expandedArray.length,
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to save expanded incidents to storage', { error });
+    }
+  }, [expandedIncidents]);
 
   const setToday = () => {
     const today = new Date();
@@ -183,7 +281,7 @@ export function IncidentQueryPage() {
       setCurrentPage(page);
 
       try {
-        logger.info({ page, pageSize: customPageSize || pageSize }, 'Starting incident search');
+        logger.info('Starting incident search', { page, pageSize: customPageSize || pageSize });
         const params = new URLSearchParams();
         if (searchQuery.trim()) {
           params.set('query', searchQuery.trim());
@@ -220,7 +318,7 @@ export function IncidentQueryPage() {
           severity: (item.severity?.toLowerCase() || 'medium') as Incident['severity'],
           date: item.date || item.createdDate || new Date().toISOString(),
           affectedEmails: item.affectedEmails || item.emails || [],
-          description: item.description || item.details || 'No description available',
+          description: item.summary || item.description || 'No description available',
           status: (item.status?.toLowerCase() || 'active') as Incident['status'],
           fileId: item.fileId || item.attachmentId,
           brandName: item.brandName || item.brand,
@@ -233,15 +331,12 @@ export function IncidentQueryPage() {
           ...item,
         }));
 
-        logger.debug(
-          {
-            sampleIncident: transformedIncidents[0],
-            emailCount: transformedIncidents[0]?.emailCount,
-            fileId: transformedIncidents[0]?.fileId,
-            files: transformedIncidents[0]?.files,
-          },
-          'Transformed incidents'
-        );
+        logger.debug('Transformed incidents', {
+          sampleIncident: transformedIncidents[0],
+          emailCount: transformedIncidents[0]?.emailCount,
+          fileId: transformedIncidents[0]?.fileId,
+          files: transformedIncidents[0]?.files,
+        });
 
         setIncidents(transformedIncidents);
         setTotalResults(data.totalCount || 0);
@@ -251,7 +346,7 @@ export function IncidentQueryPage() {
           description: `Found ${data.totalCount || 0} incident${data.totalCount !== 1 ? 's' : ''}`,
         });
       } catch (error) {
-        logger.error({ error }, 'Search error');
+        logger.error('Search error', { error });
         toast({
           title: 'Search failed',
           description: error instanceof Error ? error.message : 'Failed to search incidents',
@@ -267,94 +362,321 @@ export function IncidentQueryPage() {
     [searchQuery, dateRange, brandName, threatType, pageSize, toast]
   );
 
-  const handleDownload = async (incident: Incident) => {
-    setIsDownloading(incident.id);
+  const fetchIncidentEmails = useCallback(
+    async (incident: Incident) => {
+      // if (emailCache[incident.id]) {
+      //   return emailCache[incident.id];
+      // }
 
-    try {
-      logger.info({ incidentId: incident.id }, 'Fetching incident details for download');
+      setLoadingEmails((prev) => new Set(prev).add(incident.id));
 
-      const detailResponse = await fetch(`/api/incidents/detail?incidentId=${incident.id}`);
+      try {
+        logger.info('Fetching incident emails', { incidentId: incident.id });
 
-      if (!detailResponse.ok) {
-        throw new Error('Failed to fetch incident details');
-      }
+        const detailResponse = await fetch(`/api/incidents/detail?incidentId=${incident.id}`);
 
-      const detailData = await detailResponse.json();
-      logger.debug({ detailData }, 'Incident details fetched');
+        if (!detailResponse.ok) {
+          throw new Error('Failed to fetch incident details');
+        }
 
-      const documentFiles = detailData.documentFiles || [];
-      if (documentFiles.length === 0) {
-        throw new Error('No document files found for this incident');
-      }
+        const detailData = await detailResponse.json();
+        logger.debug('Incident details fetched', { detailData });
 
-      logger.debug({ documentFiles }, 'Found document files');
+        const documentFiles = detailData.documentFiles || [];
+        if (documentFiles.length === 0) {
+          logger.warn('No document files found', { incidentId: incident.id });
+          setEmailCache((prev) => ({ ...prev, [incident.id]: [] }));
+          return [];
+        }
 
-      const allEmails = new Set<string>();
+        logger.debug('Found document files', { documentFiles });
 
-      for (const file of documentFiles) {
-        const documentId = file.id || file.documentId;
-        if (documentId) {
-          logger.debug({ documentId }, 'Downloading file');
+        const emailMap = new Map<string, EmailData>();
 
-          const fileResponse = await fetch(`/api/incidents/download?documentId=${documentId}`);
+        for (const file of documentFiles) {
+          const documentId = file.id || file.documentId;
+          if (documentId) {
+            logger.debug('Downloading file', { documentId });
 
-          if (fileResponse.ok) {
-            const fileContent = await fileResponse.text();
-            logger.debug(
-              { preview: fileContent.substring(0, 200), length: fileContent.length },
-              'File content received'
-            );
+            const fileResponse = await fetch(`/api/incidents/download?documentId=${documentId}`);
 
-            const lines = fileContent.split('\n');
-            const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+            if (fileResponse.ok) {
+              const contentType = fileResponse.headers.get('content-type') || '';
+              const fileContent = await fileResponse.text();
 
-            for (const line of lines) {
-              const matches = line.match(emailRegex);
-              if (matches) {
-                matches.forEach((email) => allEmails.add(email));
+              logger.debug('File content received', {
+                contentType,
+                preview: fileContent.substring(0, 300),
+                length: fileContent.length,
+                firstLineLength: fileContent.split('\n')[0]?.length,
+              });
+
+              const lines = fileContent.split('\n').filter((line) => line.trim());
+
+              if (lines.length === 0) {
+                logger.warn('File is empty', { documentId });
+                continue;
               }
+
+              // Helper function to parse CSV line handling quoted values
+              const parseCSVLine = (line: string, delimiter: string): string[] => {
+                const result: string[] = [];
+                let current = '';
+                let inQuotes = false;
+
+                for (let i = 0; i < line.length; i++) {
+                  const char = line[i];
+
+                  if (char === '"') {
+                    // Handle escaped quotes
+                    if (inQuotes && line[i + 1] === '"') {
+                      current += '"';
+                      i++;
+                    } else {
+                      inQuotes = !inQuotes;
+                    }
+                  } else if (char === delimiter && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                  } else {
+                    current += char;
+                  }
+                }
+                result.push(current.trim());
+                return result;
+              };
+
+              // Detect delimiter by checking first few lines
+              const firstLine = lines[0];
+              let delimiter = ',';
+              const tabCount = (firstLine.match(/\t/g) || []).length;
+              const commaCount = (firstLine.match(/,/g) || []).length;
+
+              if (tabCount > commaCount) {
+                delimiter = '\t';
+              }
+
+              logger.debug('Delimiter detected', { delimiter, tabCount, commaCount });
+
+              // Check if first line contains headers
+              const firstLineLower = firstLine.toLowerCase();
+              const hasHeaders =
+                /email/i.test(firstLineLower) ||
+                /full_name/i.test(firstLineLower) ||
+                /source/i.test(firstLineLower) ||
+                /name/i.test(firstLineLower) ||
+                /title/i.test(firstLineLower) ||
+                /description/i.test(firstLineLower) ||
+                /username/i.test(firstLineLower);
+
+              if (hasHeaders) {
+                // Parse structured CSV/TSV file
+                const headers = parseCSVLine(lines[0], delimiter).map((h) =>
+                  h.trim().replace(/^"|"$/g, '')
+                );
+
+                const emailIndex = headers.findIndex(
+                  (h) =>
+                    /email/i.test(h) || /e-mail/i.test(h) || /mail/i.test(h) || /Username/.test(h)
+                );
+
+                const fullNameIndex = headers.findIndex(
+                  (h) => /full_name/i.test(h) || /fullname/i.test(h) || /name/i.test(h)
+                );
+                const sourceDescIndex = headers.findIndex(
+                  (h) => /source_description/i.test(h) || /description/i.test(h) || /Title/.test(h)
+                );
+                const sourceTitleIndex = headers.findIndex(
+                  (h) => /source_title/i.test(h) || /Source/.test(h)
+                );
+
+                logger.debug('CSV headers parsed', {
+                  headers,
+                  emailIndex,
+                  fullNameIndex,
+                  sourceDescIndex,
+                  sourceTitleIndex,
+                  totalLines: lines.length,
+                });
+
+                for (let i = 1; i < lines.length; i++) {
+                  const columns = parseCSVLine(lines[i], delimiter).map((col) =>
+                    col.trim().replace(/^"|"$/g, '')
+                  );
+
+                  if (emailIndex !== -1 && columns[emailIndex]) {
+                    const email = columns[emailIndex].trim();
+                    if (email && email.includes('@') && !email.includes('email')) {
+                      emailMap.set(email, {
+                        email,
+                        full_name:
+                          fullNameIndex !== -1 && columns[fullNameIndex]
+                            ? columns[fullNameIndex]
+                            : undefined,
+                        source_description:
+                          sourceDescIndex !== -1 && columns[sourceDescIndex]
+                            ? columns[sourceDescIndex]
+                            : undefined,
+                        source_title:
+                          sourceTitleIndex !== -1 && columns[sourceTitleIndex]
+                            ? columns[sourceTitleIndex]
+                            : undefined,
+                      });
+                    }
+                  }
+                }
+
+                logger.debug('Emails extracted from CSV', {
+                  extractedCount: emailMap.size,
+                  documentId,
+                });
+              } else {
+                // Fallback: Extract emails using regex
+                logger.debug('No headers detected, using regex extraction', { documentId });
+                const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+                for (const line of lines) {
+                  const matches = line.match(emailRegex);
+                  if (matches) {
+                    matches.forEach((email) => {
+                      if (!emailMap.has(email)) {
+                        emailMap.set(email, { email });
+                      }
+                    });
+                  }
+                }
+              }
+            } else {
+              logger.warn('File download failed', { status: fileResponse.status, documentId });
             }
           }
         }
+
+        const emailsArray = Array.from(emailMap.values());
+        logger.info('Emails extracted and cached', {
+          totalEmails: emailsArray.length,
+          incidentId: incident.id,
+        });
+
+        setEmailCache((prev) => ({ ...prev, [incident.id]: emailsArray }));
+        return emailsArray;
+      } catch (error) {
+        logger.error('Failed to fetch emails', { error, incidentId: incident.id });
+        return [];
+      } finally {
+        setLoadingEmails((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(incident.id);
+          return newSet;
+        });
       }
+    },
+    [emailCache]
+  );
 
-      logger.info({ totalEmails: allEmails.size, incidentId: incident.id }, 'Emails extracted');
+  const toggleIncidentExpansion = useCallback(
+    async (incident: Incident) => {
+      const isExpanded = expandedIncidents.has(incident.id);
 
-      if (allEmails.size === 0) {
-        throw new Error('No email addresses found in the documents');
+      if (isExpanded) {
+        setExpandedIncidents((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(incident.id);
+          return newSet;
+        });
+      } else {
+        setExpandedIncidents((prev) => new Set(prev).add(incident.id));
+
+        // Refetch on expand if download button is not disabled (i.e., not currently downloading)
+        const isDownloadButtonDisabled = isDownloading === incident.id;
+        if (!isDownloadButtonDisabled && !loadingEmails.has(incident.id)) {
+          await fetchIncidentEmails(incident);
+        }
       }
+    },
+    [expandedIncidents, isDownloading, loadingEmails, fetchIncidentEmails]
+  );
 
-      const csvContent = [
-        'Incident ID,Email',
-        ...Array.from(allEmails).map((email) => `${incident.id},${email}`),
-      ].join('\n');
+  const handleDownload = useCallback(
+    async (incident: Incident) => {
+      setIsDownloading(incident.id);
 
-      const blob = new Blob([csvContent], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const fileDate = new Date(incident.date).toISOString().split('T')[0]; // Format: YYYY-MM-DD
-      a.download = `incident_${incident.id}_${fileDate}_emails.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      try {
+        logger.info('Starting download process', { incidentId: incident.id });
 
-      toast({
-        title: 'Download complete',
-        description: `Downloaded ${allEmails.size} unique emails for incident ${incident.id}`,
-      });
-    } catch (error) {
-      logger.error({ error, incidentId: incident.id }, 'Download error');
-      toast({
-        title: 'Download failed',
-        description: error instanceof Error ? error.message : 'Failed to download file',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsDownloading(null);
-    }
-  };
+        // Always fetch fresh data if not already cached
+        let emails = emailCache[incident.id];
+        const needsFetch = !emails || emails.length === 0;
+
+        if (needsFetch) {
+          logger.info('Fetching incident details and emails', { incidentId: incident.id });
+          toast({
+            title: 'Preparing download',
+            description: 'Fetching incident details and email data...',
+          });
+          emails = await fetchIncidentEmails(incident);
+        }
+
+        if (!emails || emails.length === 0) {
+          throw new Error('No email addresses found for this incident');
+        }
+
+        logger.info('Generating CSV for download', {
+          incidentId: incident.id,
+          emailCount: emails.length,
+        });
+
+        const escapeCsvValue = (value: string | undefined) => {
+          if (!value) return '';
+          // Escape quotes and wrap in quotes if contains comma, newline, or quote
+          if (value.includes(',') || value.includes('\n') || value.includes('"')) {
+            return `"${value.replace(/"/g, '""')}"`;
+          }
+          return value;
+        };
+
+        const csvContent = [
+          'Incident ID,Email,Full Name,Source,Description',
+          ...emails.map((emailData) =>
+            [
+              incident.id,
+              emailData.email,
+              escapeCsvValue(emailData.full_name),
+              escapeCsvValue(emailData.source_title),
+              escapeCsvValue(emailData.source_description),
+            ].join(',')
+          ),
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const fileDate = new Date(incident.date).toISOString().split('T')[0];
+        a.download = `incident_${incident.id}_${fileDate}_emails.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        toast({
+          title: 'Download complete',
+          description: `Downloaded ${emails.length} unique email${emails.length !== 1 ? 's' : ''} for incident ${incident.id}`,
+        });
+
+        logger.info('Download completed', { incidentId: incident.id, emailCount: emails.length });
+      } catch (error) {
+        logger.error('Download error', { error, incidentId: incident.id });
+        toast({
+          title: 'Download failed',
+          description: error instanceof Error ? error.message : 'Failed to download file',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsDownloading(null);
+      }
+    },
+    [emailCache, fetchIncidentEmails, toast]
+  );
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -652,33 +974,34 @@ export function IncidentQueryPage() {
                                   onClick={() => handleDownload(incident)}
                                   variant="outline"
                                   className="gap-2 whitespace-nowrap border-primary text-primary hover:bg-primary hover:text-primary-foreground"
-                                  disabled={
-                                    !incident.changeLogs?.some((log) =>
-                                      log.content?.includes('added to incident')
-                                    ) || isDownloading === incident.id
-                                  }
+                                  disabled={isDownloading === incident.id}
                                 >
                                   {isDownloading === incident.id ? (
                                     <>
                                       <Loader2 className="h-4 w-4 animate-spin" />
-                                      Downloading...
+                                      {emailCache[incident.id] ? 'Downloading...' : 'Preparing...'}
                                     </>
                                   ) : (
                                     <>
                                       <Download className="h-4 w-4" />
                                       Download Emails
+                                      {emailCache[incident.id] && (
+                                        <Badge variant="secondary" className="ml-1 text-xs">
+                                          {emailCache[incident.id].length}
+                                        </Badge>
+                                      )}
                                     </>
                                   )}
                                 </Button>
                               </span>
                             </TooltipTrigger>
-                            {!incident.changeLogs?.some((log) =>
-                              log.content?.includes('added to incident')
-                            ) && (
-                              <TooltipContent>
-                                <p>No emails were leaked in this incident</p>
-                              </TooltipContent>
-                            )}
+                            <TooltipContent>
+                              <p>
+                                {emailCache[incident.id]
+                                  ? `Download ${emailCache[incident.id].length} cached email${emailCache[incident.id].length !== 1 ? 's' : ''}`
+                                  : 'Fetch incident details and download emails'}
+                              </p>
+                            </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
                       </div>
@@ -686,25 +1009,112 @@ export function IncidentQueryPage() {
                     <CardContent>
                       <p className="mb-4 text-foreground">{incident.description}</p>
 
-                      {incident.affectedEmails && incident.affectedEmails.length > 0 && (
-                        <div>
-                          <h4 className="mb-2 text-sm font-semibold text-foreground">
-                            Affected Email Addresses:
-                          </h4>
-                          <div className="flex flex-wrap gap-2">
-                            {incident.affectedEmails.slice(0, 3).map((email) => (
-                              <Badge key={email} variant="secondary" className="font-mono text-xs">
-                                {email}
-                              </Badge>
-                            ))}
-                            {incident.affectedEmails.length > 3 && (
-                              <Badge variant="secondary" className="text-xs">
-                                +{incident.affectedEmails.length - 3} more
-                              </Badge>
+                      <div className="mb-4">
+                        <Button
+                          onClick={() => toggleIncidentExpansion(incident)}
+                          variant="outline"
+                          className="w-full gap-2"
+                          disabled={loadingEmails.has(incident.id)}
+                        >
+                          {loadingEmails.has(incident.id) ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Loading emails...
+                            </>
+                          ) : (
+                            <>
+                              <Mail className="h-4 w-4" />
+                              {expandedIncidents.has(incident.id) ? (
+                                <>
+                                  <span>Hide Affected Emails</span>
+                                  <ChevronUp className="h-4 w-4 ml-auto" />
+                                </>
+                              ) : (
+                                <>
+                                  <span>
+                                    View Affected Emails
+                                    {emailCache[incident.id] && (
+                                      <span className="ml-2 text-muted-foreground">
+                                        ({emailCache[incident.id].length} emails)
+                                      </span>
+                                    )}
+                                  </span>
+                                  <ChevronDown className="h-4 w-4 ml-auto" />
+                                </>
+                              )}
+                            </>
+                          )}
+                        </Button>
+
+                        {expandedIncidents.has(incident.id) && emailCache[incident.id] && (
+                          <div className="mt-4 border rounded-lg overflow-hidden">
+                            <div className="max-h-96 overflow-y-auto overflow-x-auto">
+                              <table className="w-full text-sm">
+                                <thead className="bg-muted sticky top-0">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">
+                                      #
+                                    </th>
+                                    <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">
+                                      Email / Username
+                                    </th>
+                                    <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">
+                                      Full Name
+                                    </th>
+                                    <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">
+                                      Source
+                                    </th>
+                                    <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">
+                                      Description
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {emailCache[incident.id].length === 0 ? (
+                                    <tr>
+                                      <td
+                                        colSpan={5}
+                                        className="px-4 py-8 text-center text-muted-foreground"
+                                      >
+                                        No email addresses found for this incident
+                                      </td>
+                                    </tr>
+                                  ) : (
+                                    emailCache[incident.id].map((emailData, index) => (
+                                      <tr
+                                        key={`${incident.id}-${emailData.email}-${index}`}
+                                        className="border-t hover:bg-muted/50"
+                                      >
+                                        <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                                          {index + 1}
+                                        </td>
+                                        <td className="px-3 py-2 font-mono text-xs break-all">
+                                          {emailData.email}
+                                        </td>
+                                        <td className="px-3 py-2 text-xs">
+                                          {emailData.full_name || '-'}
+                                        </td>
+                                        <td className="px-3 py-2 text-xs max-w-xs break-words">
+                                          {emailData.source_title || '-'}
+                                        </td>
+                                        <td className="px-3 py-2 text-xs max-w-md break-words">
+                                          {emailData.source_description || '-'}
+                                        </td>
+                                      </tr>
+                                    ))
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                            {emailCache[incident.id].length > 0 && (
+                              <div className="px-4 py-2 bg-muted/50 border-t text-xs text-muted-foreground">
+                                Total: {emailCache[incident.id].length} email
+                                {emailCache[incident.id].length !== 1 ? 's' : ''}
+                              </div>
                             )}
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </CardContent>
                   </Card>
                 );
