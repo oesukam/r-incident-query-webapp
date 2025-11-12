@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error({ errorText, status: response.status, documentId }, 'File download failed');
+      logger.error('File download failed', { errorText, status: response.status, documentId });
       return NextResponse.json(
         { error: 'Failed to download file', details: errorText },
         { status: response.status }
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 
     // Return the raw file content for the frontend to parse
     const fileContent = await response.text();
-    logger.info({ documentId, contentLength: fileContent.length }, 'File downloaded successfully');
+    logger.info('File downloaded successfully', { documentId, contentLength: fileContent.length });
 
     return new NextResponse(fileContent, {
       headers: {

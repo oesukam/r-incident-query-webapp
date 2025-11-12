@@ -332,8 +332,15 @@ export function IncidentQueryPage() {
         }
         params.set('page', page.toString());
         params.set('pageSize', (customPageSize || pageSize).toString());
+        // Add timestamp to prevent caching
+        params.set('_t', Date.now().toString());
 
-        const response = await fetch(`/api/incidents/search?${params.toString()}`);
+        const response = await fetch(`/api/incidents/search?${params.toString()}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+          },
+        });
 
         if (!response.ok) {
           const error = await response.json();
@@ -362,6 +369,14 @@ export function IncidentQueryPage() {
           changeLogs: item.changeLogs || [], // Added changeLogs from API response
           ...item,
         }));
+
+        const incidentIds = transformedIncidents.map((inc) => inc.id);
+        logger.info('Page data received from API', {
+          page,
+          pageSize: customPageSize || pageSize,
+          incidentIds: incidentIds.slice(0, 5),
+          totalCount: data.totalCount || 0,
+        });
 
         logger.debug('Transformed incidents', {
           sampleIncident: transformedIncidents[0],
@@ -969,7 +984,37 @@ export function IncidentQueryPage() {
         {/* Incidents List */}
         {hasSearched && (
           <div className="space-y-4">
-            {incidents.length === 0 ? (
+            {isLoading ? (
+              // Skeleton Loading Cards
+              Array.from({ length: pageSize }).map((_, index) => (
+                <Card key={`skeleton-${index}`} className="animate-pulse">
+                  <CardHeader>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex-1 space-y-3">
+                        <div className="flex items-center gap-3">
+                          <div className="h-6 w-48 bg-muted rounded"></div>
+                          <div className="h-5 w-16 bg-muted rounded"></div>
+                          <div className="h-5 w-16 bg-muted rounded"></div>
+                        </div>
+                        <div className="flex gap-4">
+                          <div className="h-4 w-32 bg-muted rounded"></div>
+                          <div className="h-4 w-32 bg-muted rounded"></div>
+                          <div className="h-4 w-32 bg-muted rounded"></div>
+                        </div>
+                      </div>
+                      <div className="h-9 w-40 bg-muted rounded"></div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="h-4 w-full bg-muted rounded"></div>
+                      <div className="h-4 w-3/4 bg-muted rounded"></div>
+                      <div className="h-10 w-full bg-muted rounded mt-4"></div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            ) : incidents.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <AlertTriangle className="mb-4 h-12 w-12 text-muted-foreground" />
@@ -1206,7 +1251,11 @@ export function IncidentQueryPage() {
               size="sm"
               className="gap-1 bg-transparent"
             >
-              <ChevronLeft className="h-4 w-4" />
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ChevronLeft className="h-4 w-4" />
+              )}
               Previous
             </Button>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1216,6 +1265,7 @@ export function IncidentQueryPage() {
                   {Math.ceil(totalResults / pageSize)}
                 </span>
               </span>
+              {isLoading && <span className="text-xs text-muted-foreground">(Loading...)</span>}
             </div>
             <Button
               onClick={handleNextPage}
@@ -1225,7 +1275,11 @@ export function IncidentQueryPage() {
               className="gap-1"
             >
               Next
-              <ChevronRight className="h-4 w-4" />
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
             </Button>
           </div>
         )}

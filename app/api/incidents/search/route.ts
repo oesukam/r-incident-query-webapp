@@ -3,7 +3,7 @@ import { logger } from '@/lib/logger';
 import { getAccessToken } from '@/lib/token-manager';
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 60; // Cache for 60 seconds
+export const revalidate = false; // Disable caching to allow proper pagination
 
 export async function GET(request: NextRequest) {
   try {
@@ -40,8 +40,8 @@ export async function GET(request: NextRequest) {
     if (threatType && threatType !== 'All Thread Types') {
       apiUrl.searchParams.append('ThreatTypeCodes', threatType);
     }
-    apiUrl.searchParams.set('page', page);
-    apiUrl.searchParams.set('pageSize', pageSize);
+    apiUrl.searchParams.set('PageNumber', page);
+    apiUrl.searchParams.set('PageSize', pageSize);
 
     logger.debug({ url: apiUrl.toString() }, 'Making API request');
 
@@ -63,8 +63,13 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json();
+    const incidentIds = data?.items?.map((item: any) => item.id || item.incidentId) || [];
     logger.info('Search results retrieved', {
       totalCount: data?.totalCount || data?.items?.length || 0,
+      page,
+      pageSize,
+      incidentIds: incidentIds.slice(0, 5), // Log first 5 IDs to verify different pages
+      url: apiUrl.toString(),
     });
     return NextResponse.json(data, {
       headers: {
