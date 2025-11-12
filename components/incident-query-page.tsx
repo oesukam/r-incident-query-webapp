@@ -831,6 +831,22 @@ export function IncidentQueryPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            <div className="mb-4 flex flex-col items-center gap-4">
+              <div className="w-full md:w-80">
+                <label className="mb-2 block text-sm font-medium text-foreground text-center">
+                  Brand Name
+                </label>
+                <SearchableSelect
+                  value={brandName}
+                  onValueChange={setBrandName}
+                  options={brandNameOptions}
+                  placeholder="Select a brand"
+                  searchPlaceholder="Search brands..."
+                  emptyMessage="No brands found."
+                  centered
+                />
+              </div>
+            </div>
             <div className="mb-4">
               <div className="flex flex-col gap-3 items-center">
                 <div className="flex flex-wrap items-center justify-center gap-2">
@@ -888,21 +904,8 @@ export function IncidentQueryPage() {
                 </div>
               </div>
             </div>
-            <div className="mb-4 flex flex-col items-center gap-4 md:flex-row md:justify-center md:gap-6">
-              <div className="w-full md:w-80">
-                <label className="mb-2 block text-sm font-medium text-foreground text-center">
-                  Brand Name
-                </label>
-                <SearchableSelect
-                  value={brandName}
-                  onValueChange={setBrandName}
-                  options={brandNameOptions}
-                  placeholder="Select a brand"
-                  searchPlaceholder="Search brands..."
-                  emptyMessage="No brands found."
-                />
-              </div>
-              <div className="w-full md:w-80">
+            <div className="mb-4 flex flex-col items-center gap-4">
+              <div className="w-full md:w-[500px]">
                 <label className="mb-2 block text-sm font-medium text-foreground text-center">
                   Threat Type
                 </label>
@@ -913,6 +916,7 @@ export function IncidentQueryPage() {
                   placeholder="Select threat type"
                   searchPlaceholder="Search threat types..."
                   emptyMessage="No threat types found."
+                  centered
                 />
               </div>
             </div>

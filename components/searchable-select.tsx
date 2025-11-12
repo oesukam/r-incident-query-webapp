@@ -22,6 +22,7 @@ interface SearchableSelectProps {
   searchPlaceholder?: string;
   emptyMessage?: string;
   className?: string;
+  centered?: boolean;
 }
 
 export function SearchableSelect({
@@ -32,6 +33,7 @@ export function SearchableSelect({
   searchPlaceholder = 'Search...',
   emptyMessage = 'No results found.',
   className,
+  centered = false,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
 
@@ -44,13 +46,13 @@ export function SearchableSelect({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn('w-full justify-between', className)}
+          className={cn('w-full', centered ? 'justify-center' : 'justify-between', className)}
         >
           <span className="truncate">{selectedOption?.label || placeholder}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+      <PopoverContent className="p-0" align="start" style={{ width: 'var(--radix-popover-trigger-width)' }}>
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
           <CommandList>
