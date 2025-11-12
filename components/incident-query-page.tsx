@@ -19,7 +19,6 @@ import {
   LogOut,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -144,7 +143,6 @@ const brandNameOptions = [
 
 export function IncidentQueryPage() {
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState('');
   const [dateRange, setDateRange] = useState<DateRange>({ from: undefined, to: undefined });
   const [activeQuickRange, setActiveQuickRange] = useState<string | null>(null);
   const [brandName, setBrandName] = useState<string>('Republic Core');
@@ -162,6 +160,7 @@ export function IncidentQueryPage() {
   const { toast } = useToast();
 
   const searchInProgressRef = useRef(false);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Logout handler
   const handleLogout = useCallback(async () => {
@@ -271,6 +270,24 @@ export function IncidentQueryPage() {
     setActiveQuickRange('today');
   };
 
+  const setLast7Days = () => {
+    const today = new Date();
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(today.getDate() - 7);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+    setDateRange({ from: sevenDaysAgo, to: new Date() });
+    setActiveQuickRange('last7days');
+  };
+
+  const setLast30Days = () => {
+    const today = new Date();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+    thirtyDaysAgo.setHours(0, 0, 0, 0);
+    setDateRange({ from: thirtyDaysAgo, to: new Date() });
+    setActiveQuickRange('last30days');
+  };
+
   const setThisWeek = () => {
     const today = new Date();
     const firstDay = new Date(today.setDate(today.getDate() - today.getDay()));
@@ -308,9 +325,6 @@ export function IncidentQueryPage() {
       try {
         logger.info('Starting incident search', { page, pageSize: customPageSize || pageSize });
         const params = new URLSearchParams();
-        if (searchQuery.trim()) {
-          params.set('query', searchQuery.trim());
-        }
         if (dateRange.from) {
           params.set('CreatedDateFrom', dateRange.from.toISOString());
         }
@@ -384,15 +398,36 @@ export function IncidentQueryPage() {
         searchInProgressRef.current = false;
       }
     },
-    [searchQuery, dateRange, brandName, threatType, pageSize, toast]
+    [dateRange, brandName, threatType, pageSize, toast]
   );
+
+  // Auto-search when filters change (after initial search)
+  useEffect(() => {
+    // Only auto-search if the user has performed at least one search
+    if (hasSearched) {
+      // Clear any pending search timeout
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+
+      // Debounce the search by 1500ms to allow changing multiple filters
+      searchTimeoutRef.current = setTimeout(() => {
+        logger.debug('Auto-triggering search due to filter change');
+        handleSearch(1);
+      }, 700);
+    }
+
+    // Cleanup timeout on unmount or when dependencies change
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange, brandName, threatType, hasSearched]);
 
   const fetchIncidentEmails = useCallback(
     async (incident: Incident) => {
-      // if (emailCache[incident.id]) {
-      //   return emailCache[incident.id];
-      // }
-
       setLoadingEmails((prev) => new Set(prev).add(incident.id));
 
       try {
@@ -758,19 +793,8 @@ export function IncidentQueryPage() {
       {/* Header */}
       <header className="border-b border-border bg-card">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <Shield className="h-8 w-8 text-primary" />
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight text-foreground">
-                  Security Incident Query
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  Search and manage security incidents across your organization
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
+          <div className="relative flex flex-col items-center gap-3">
+            <div className="absolute right-0 top-0 flex items-center gap-2">
               <Button
                 onClick={handleLogout}
                 variant="outline"
@@ -783,6 +807,17 @@ export function IncidentQueryPage() {
               </Button>
               <ThemeToggle />
             </div>
+            <div className="flex items-center gap-3">
+              <Shield className="h-8 w-8 text-primary" />
+              <div className="text-center">
+                <h1 className="text-3xl font-bold tracking-tight text-foreground">
+                  Security Incident Query
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Search and manage security incidents across your organization
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </header>
@@ -790,26 +825,35 @@ export function IncidentQueryPage() {
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* Search Section */}
         <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Search className="h-5 w-5 text-primary" />
-              Search Incidents
-            </CardTitle>
-            <CardDescription>
-              Search by incident ID, title, or description and filter by date range, brand, and
-              threat type
+          <CardHeader className="text-center">
+            <CardDescription className="text-lg font-medium">
+              Filter incidents by date range, brand, and threat type
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="mb-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-col gap-3 items-center">
+                <div className="flex flex-wrap items-center justify-center gap-2">
                   <Button
                     onClick={setToday}
                     variant={activeQuickRange === 'today' ? 'default' : 'outline'}
                     size="sm"
                   >
                     Today
+                  </Button>
+                  <Button
+                    onClick={setLast7Days}
+                    variant={activeQuickRange === 'last7days' ? 'default' : 'outline'}
+                    size="sm"
+                  >
+                    Last 7 Days
+                  </Button>
+                  <Button
+                    onClick={setLast30Days}
+                    variant={activeQuickRange === 'last30days' ? 'default' : 'outline'}
+                    size="sm"
+                  >
+                    Last 30 Days
                   </Button>
                   <Button
                     onClick={setThisWeek}
@@ -833,7 +877,7 @@ export function IncidentQueryPage() {
                     This Year
                   </Button>
                 </div>
-                <div className="flex-1">
+                <div className="w-full sm:w-auto">
                   <DateRangePicker
                     dateRange={dateRange}
                     onDateRangeChange={(range) => {
@@ -844,9 +888,11 @@ export function IncidentQueryPage() {
                 </div>
               </div>
             </div>
-            <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Brand Name</label>
+            <div className="mb-4 flex flex-col items-center gap-4 md:flex-row md:justify-center md:gap-6">
+              <div className="w-full md:w-80">
+                <label className="mb-2 block text-sm font-medium text-foreground text-center">
+                  Brand Name
+                </label>
                 <SearchableSelect
                   value={brandName}
                   onValueChange={setBrandName}
@@ -856,8 +902,8 @@ export function IncidentQueryPage() {
                   emptyMessage="No brands found."
                 />
               </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">
+              <div className="w-full md:w-80">
+                <label className="mb-2 block text-sm font-medium text-foreground text-center">
                   Threat Type
                 </label>
                 <SearchableSelect
@@ -870,27 +916,20 @@ export function IncidentQueryPage() {
                 />
               </div>
             </div>
-            <div className="flex gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search incidents by keyword..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && !isLoading && handleSearch()}
-                  className="pl-10"
-                  disabled={isLoading}
-                />
-              </div>
-              <Button onClick={() => handleSearch()} className="gap-2" disabled={isLoading}>
+            <div className="flex justify-center mt-2">
+              <Button
+                onClick={() => handleSearch()}
+                className="gap-2 px-12 py-5 text-base w-full sm:w-64 md:w-72"
+                disabled={isLoading}
+              >
                 {isLoading ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-5 w-5 animate-spin" />
                     Searching...
                   </>
                 ) : (
                   <>
-                    <Search className="h-4 w-4" />
+                    <Search className="h-5 w-5" />
                     Search
                   </>
                 )}

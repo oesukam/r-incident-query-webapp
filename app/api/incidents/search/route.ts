@@ -8,7 +8,6 @@ export const revalidate = 60; // Cache for 60 seconds
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const query = searchParams.get('query') || '';
     const startDate = searchParams.get('CreatedDateFrom');
     const endDate = searchParams.get('CreatedDateTo');
     const brandName = searchParams.get('BrandNames');
@@ -17,7 +16,6 @@ export async function GET(request: NextRequest) {
     const threatType = searchParams.get('ThreatTypeCodes');
 
     logger.info('Searching incidents', {
-      query,
       startDate,
       endDate,
       brandName,
@@ -30,9 +28,6 @@ export async function GET(request: NextRequest) {
     const accessToken = await getAccessToken();
 
     const apiUrl = new URL('https://threatintel.phishlabs.com/api/external/incident/search');
-    if (query) {
-      apiUrl.searchParams.set('query', query);
-    }
     if (startDate) {
       apiUrl.searchParams.set('CreatedDateFrom', startDate);
     }
