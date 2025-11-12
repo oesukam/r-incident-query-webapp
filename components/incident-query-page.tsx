@@ -212,16 +212,6 @@ export function IncidentQueryPage() {
           });
         }
       }
-
-      // Load expanded incidents state
-      const expandedData = sessionStorage.getItem(EXPANDED_KEY);
-      if (expandedData) {
-        const expandedArray: string[] = JSON.parse(expandedData);
-        setExpandedIncidents(new Set(expandedArray));
-        logger.info('Loaded expanded incidents from storage', {
-          expandedCount: expandedArray.length,
-        });
-      }
     } catch (error) {
       logger.error('Failed to load cache from storage', { error });
     }
@@ -321,6 +311,9 @@ export function IncidentQueryPage() {
       setIsLoading(true);
       setHasSearched(true);
       setCurrentPage(page);
+
+      // Close all expanded emails on new search
+      setExpandedIncidents(new Set());
 
       try {
         logger.info('Starting incident search', { page, pageSize: customPageSize || pageSize });
