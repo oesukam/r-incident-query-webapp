@@ -952,31 +952,77 @@ export function IncidentQueryPage() {
 
         {/* Results Summary */}
         {hasSearched && (
-          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
+          <div className="mb-6">
+            <div className="mb-4">
               <h2 className="text-2xl font-semibold text-foreground">Incidents</h2>
-              <p className="text-sm text-muted-foreground">
+            </div>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="text-sm text-muted-foreground">
                 {totalResults} {totalResults === 1 ? 'result' : 'results'} found
                 {totalResults > 0 && (
                   <span className="ml-2">
                     (Page {currentPage} of {Math.ceil(totalResults / pageSize)})
                   </span>
                 )}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Results per page:</span>
-              <Select value={pageSize.toString()} onValueChange={handlePageSizeChange}>
-                <SelectTrigger className="w-20">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="10">10</SelectItem>
-                  <SelectItem value="25">25</SelectItem>
-                  <SelectItem value="50">50</SelectItem>
-                  <SelectItem value="100">100</SelectItem>
-                </SelectContent>
-              </Select>
+              </div>
+
+              {/* Top Pagination */}
+              {incidents.length > 0 && (
+                <div className="flex items-center justify-center gap-2">
+                  <Button
+                    onClick={handlePreviousPage}
+                    disabled={currentPage === 1 || isLoading}
+                    variant="outline"
+                    size="sm"
+                    className="gap-1 bg-transparent"
+                  >
+                    {isLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ChevronLeft className="h-4 w-4" />
+                    )}
+                    Previous
+                  </Button>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span>
+                      Page <span className="font-semibold text-foreground">{currentPage}</span> of{' '}
+                      <span className="font-semibold text-foreground">
+                        {Math.ceil(totalResults / pageSize)}
+                      </span>
+                    </span>
+                    {isLoading && <span className="text-xs text-muted-foreground">(Loading...)</span>}
+                  </div>
+                  <Button
+                    onClick={handleNextPage}
+                    disabled={currentPage >= Math.ceil(totalResults / pageSize) || isLoading}
+                    variant="outline"
+                    size="sm"
+                    className="gap-1"
+                  >
+                    Next
+                    {isLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Results per page:</span>
+                <Select value={pageSize.toString()} onValueChange={handlePageSizeChange}>
+                  <SelectTrigger className="w-20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         )}
