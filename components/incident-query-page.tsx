@@ -319,16 +319,16 @@ export function IncidentQueryPage() {
         logger.info('Starting incident search', { page, pageSize: customPageSize || pageSize });
         const params = new URLSearchParams();
         if (dateRange.from) {
-          params.set('CreatedDateFrom', dateRange.from.toISOString());
+          params.set('fromDate', dateRange.from.toISOString());
         }
         if (dateRange.to) {
-          params.set('CreatedDateTo', dateRange.to.toISOString());
+          params.set('toDate', dateRange.to.toISOString());
         }
         if (brandName !== 'All Brands') {
-          params.set('BrandNames', brandName);
+          params.set('brandName', brandName);
         }
         if (threatType !== 'all') {
-          params.set('ThreatTypeCodes', threatType);
+          params.set('threatType', threatType);
         }
         params.set('page', page.toString());
         params.set('pageSize', (customPageSize || pageSize).toString());
@@ -350,12 +350,13 @@ export function IncidentQueryPage() {
         const data = await response.json();
 
         const incidentItems = data.items || [];
+        logger.info('Search results', { incidentItems });
 
         const transformedIncidents: Incident[] = incidentItems.map((item: any) => ({
           id: item.id || item.incidentId || `INC-${Date.now()}`,
           title: item.title || item.name || 'Untitled Incident',
           severity: (item.severity?.toLowerCase() || 'medium') as Incident['severity'],
-          date: item.date || item.createdDate || new Date().toISOString(),
+          date: item.created || item.closed || new Date().toISOString(),
           affectedEmails: item.affectedEmails || item.emails || [],
           description: item.summary || item.description || 'No description available',
           status: (item.status?.toLowerCase() || 'active') as Incident['status'],
@@ -990,7 +991,9 @@ export function IncidentQueryPage() {
                         {Math.ceil(totalResults / pageSize)}
                       </span>
                     </span>
-                    {isLoading && <span className="text-xs text-muted-foreground">(Loading...)</span>}
+                    {isLoading && (
+                      <span className="text-xs text-muted-foreground">(Loading...)</span>
+                    )}
                   </div>
                   <Button
                     onClick={handleNextPage}

@@ -8,16 +8,16 @@ export const revalidate = false; // Disable caching to allow proper pagination
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const startDate = searchParams.get('CreatedDateFrom');
-    const endDate = searchParams.get('CreatedDateTo');
-    const brandName = searchParams.get('BrandNames');
+    const fromDate = searchParams.get('fromDate');
+    const toDate = searchParams.get('toDate');
+    const brandName = searchParams.get('brandName');
     const page = searchParams.get('page') || '1';
     const pageSize = searchParams.get('pageSize') || '10';
-    const threatType = searchParams.get('ThreatTypeCodes');
+    const threatType = searchParams.get('threatType');
 
     logger.info('Searching incidents', {
-      startDate,
-      endDate,
+      fromDate,
+      toDate,
       brandName,
       threatType,
       page,
@@ -28,11 +28,11 @@ export async function GET(request: NextRequest) {
     const accessToken = await getAccessToken();
 
     const apiUrl = new URL('https://threatintel.phishlabs.com/api/external/incident/search');
-    if (startDate) {
-      apiUrl.searchParams.set('CreatedDateFrom', startDate);
+    if (fromDate) {
+      apiUrl.searchParams.set('CreatedDateFrom', fromDate);
     }
-    if (endDate) {
-      apiUrl.searchParams.set('CreatedDateTo', endDate);
+    if (toDate) {
+      apiUrl.searchParams.set('CreatedDateTo', toDate);
     }
     if (brandName && brandName !== 'All Brands') {
       apiUrl.searchParams.append('BrandNames', brandName);
@@ -61,6 +61,7 @@ export async function GET(request: NextRequest) {
         { status: response.status }
       );
     }
+    logger.info('Search request successful', { status: response.status });
 
     const data = await response.json();
     const incidentIds = data?.items?.map((item: any) => item.id || item.incidentId) || [];
